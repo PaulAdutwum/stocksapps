@@ -1,24 +1,71 @@
 import streamlit as st
 import plotly.express as px
-from utils import get_stock_data, create_candlestick_chart, get_trending_stocks, get_stock_news, calculate_technical_indicators
+from utils import (
+    get_stock_data, create_candlestick_chart, get_trending_stocks,
+    get_stock_news, calculate_technical_indicators, get_company_info,
+    init_watchlist_db, add_to_watchlist, remove_from_watchlist, get_watchlist
+)
 
 def render_stock_analysis():
+    # Initialize watchlist
+    init_watchlist_db()
+
     st.markdown("""
-        <h2 style='text-align: center; color: #1E88E5;'>Stock Analysis Dashboard</h2>
+        <h2 style='text-align: center; color: #1E88E5;'>Stock Market Analysis Dashboard</h2>
     """, unsafe_allow_html=True)
 
     # Sidebar
     st.sidebar.markdown("## Analysis Options")
-    symbol = st.sidebar.text_input("Enter Stock Symbol", value="AAPL").upper()
-    period = st.sidebar.selectbox(
-        "Select Time Period",
-        ["1mo", "3mo", "6mo", "1y", "2y", "5y"],
-        help="Choose the time period for historical data analysis"
+
+    # Search with autocomplete
+    symbol = st.sidebar.text_input(
+        "Enter Stock Symbol",
+        value="AAPL",
+        help="Enter a stock symbol (e.g., AAPL for Apple)"
+    ).upper()
+
+    # Chart settings
+    chart_type = st.sidebar.selectbox(
+        "Chart Type",
+        ["candlestick", "line", "area"],
+        help="Select the type of chart visualization"
     )
 
+    timeframe = st.sidebar.selectbox(
+        "Timeframe",
+        ["1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y"],
+        index=4,
+        help="Select the time period for analysis"
+    )
+
+    interval = "1d"
+    if timeframe in ["1d", "5d"]:
+        interval = st.sidebar.selectbox(
+            "Interval",
+            ["1m", "5m", "15m", "30m", "60m"],
+            help="Select the time interval for intraday data"
+        )
+
+    # Watchlist section in sidebar
+    st.sidebar.markdown("## My Watchlist")
+    watchlist = get_watchlist(st.session_state.email)
+
+    if watchlist:
+        for watch_symbol in watchlist:
+            col1, col2 = st.sidebar.columns([3, 1])
+            with col1:
+                st.write(f"📈 {watch_symbol}")
+            with col2:
+                if st.button("❌", key=f"remove_{watch_symbol}"):
+                    remove_from_watchlist(st.session_state.email, watch_symbol)
+                    st.rerun()
+    else:
+        st.sidebar.info("Your watchlist is empty")
+
     # Main content
-    tab1, tab2, tab3, tab4 = st.tabs([
-        "Stock Analysis", 
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        "Chart Analysis", 
+        "Company Info",
         "Technical Indicators", 
         "News & Updates", 
         "Market Overview"
@@ -26,61 +73,106 @@ def render_stock_analysis():
 
     with tab1:
         if symbol:
-            df, info = get_stock_data(symbol, period)
+            df, info = get_stock_data(symbol, timeframe, interval)
             if df is not None and info is not None:
+                # Add to watchlist button
+                if symbol not in watchlist:
+                    if st.button("➕ Add to Watchlist"):
+                        add_to_watchlist(st.session_state.email, symbol)
+                        st.success(f"Added {symbol} to watchlist!")
+                        st.rerun()
+
                 # Stock Info Section
                 st.markdown(f"### {info.get('shortName', symbol)} Analysis")
-                st.markdown("""
-                    This chart shows the stock's price movement over time using candlesticks:
-                    - Green candlesticks indicate price increase
-                    - Red candlesticks indicate price decrease
-                    - The wicks show the high and low prices
-                """)
 
-                col1, col2 = st.columns([2, 1])
-
+                # Price metrics
+                col1, col2, col3, col4 = st.columns(4)
                 with col1:
-                    st.plotly_chart(create_candlestick_chart(df, symbol),
-                                  use_container_width=True)
-
+                    st.metric(
+                        "Current Price",
+                        f"${info.get('currentPrice', 0):.2f}",
+                        f"{info.get('regularMarketChangePercent', 0):.2f}%"
+                    )
                 with col2:
                     st.metric(
-                        label="Current Price",
-                        value=f"${info.get('currentPrice', 0):.2f}",
-                        delta=f"{info.get('regularMarketChangePercent', 0):.2f}%"
+                        "Day High",
+                        f"${info.get('dayHigh', 0):.2f}"
                     )
-
+                with col3:
                     st.metric(
-                        label="Market Cap",
-                        value=f"${info.get('marketCap', 0)/1e9:.2f}B"
+                        "Day Low",
+                        f"${info.get('dayLow', 0):.2f}"
                     )
-
+                with col4:
                     st.metric(
-                        label="Volume",
-                        value=f"{info.get('volume', 0):,}"
+                        "Volume",
+                        f"{info.get('volume', 0):,.0f}"
                     )
 
-                    if info.get('dividendYield'):
-                        st.metric(
-                            label="Dividend Yield",
-                            value=f"{info.get('dividendYield', 0)*100:.2f}%"
-                        )
+                # Chart
+                st.plotly_chart(
+                    create_candlestick_chart(df, symbol, chart_type),
+                    use_container_width=True
+                )
 
     with tab2:
+        if symbol:
+            company_info = get_company_info(symbol)
+            if company_info:
+                st.markdown(f"### About {company_info['Name']}")
+                st.markdown(company_info['Description'])
+
+                st.markdown("### Key Statistics")
+                col1, col2, col3 = st.columns(3)
+
+                with col1:
+                    st.metric("Sector", company_info['Sector'])
+                    st.metric("P/E Ratio", company_info['PE Ratio'])
+                    st.metric("52 Week High", f"${company_info['52 Week High']:.2f}")
+
+                with col2:
+                    st.metric("Industry", company_info['Industry'])
+                    st.metric("Market Cap", f"${company_info['Market Cap']/1e9:.2f}B")
+                    st.metric("52 Week Low", f"${company_info['52 Week Low']:.2f}")
+
+                with col3:
+                    st.metric("Website", company_info['Website'])
+                    st.metric("Volume", f"{company_info['Volume']:,.0f}")
+                    st.metric("Avg Volume", f"{company_info['Avg Volume']:,.0f}")
+
+    with tab3:
         if symbol and df is not None:
-            st.markdown("### Technical Indicators")
-            st.markdown("""
-                Technical indicators help analyze price trends and patterns:
-                - Moving Average (MA): Shows the average price over 20 days
-                - RSI: Measures overbought (>70) or oversold (<30) conditions
-                - MACD: Shows momentum and potential trend changes
-            """)
+            st.markdown("### Technical Analysis")
+
+            # Analysis explanation
+            with st.expander("📊 Understanding Technical Indicators"):
+                st.markdown("""
+                    - **Moving Averages**: Help identify trends
+                        - MA20: Short-term trend
+                        - MA50: Medium-term trend
+                        - MA200: Long-term trend
+
+                    - **RSI (Relative Strength Index)**:
+                        - Above 70: Potentially overbought
+                        - Below 30: Potentially oversold
+
+                    - **MACD (Moving Average Convergence Divergence)**:
+                        - Signals potential trend changes
+                        - When MACD crosses above Signal Line: Bullish
+                        - When MACD crosses below Signal Line: Bearish
+
+                    - **Bollinger Bands**:
+                        - Help identify volatility and potential price levels
+                        - Price near upper band: Potentially overbought
+                        - Price near lower band: Potentially oversold
+                """)
 
             df_technical = calculate_technical_indicators(df)
             if df_technical is not None:
-                # MA Chart
-                fig_ma = px.line(df_technical, x=df_technical.index, y=['Close', 'MA20'],
-                               title='Price and 20-day Moving Average')
+                # Moving Averages
+                fig_ma = px.line(df_technical, x=df_technical.index,
+                               y=['Close', 'MA20', 'MA50', 'MA200'],
+                               title='Price and Moving Averages')
                 fig_ma.update_layout(template='plotly_dark',
                                    plot_bgcolor='rgba(19,47,76,0.8)',
                                    paper_bgcolor='rgba(19,47,76,0.8)')
@@ -100,59 +192,93 @@ def render_stock_analysis():
 
                 with col2:
                     # MACD Chart
-                    fig_macd = px.line(df_technical, x=df_technical.index, y=['MACD', 'Signal_Line'],
+                    fig_macd = px.line(df_technical, x=df_technical.index,
+                                     y=['MACD', 'Signal_Line'],
                                      title='MACD and Signal Line')
                     fig_macd.update_layout(template='plotly_dark',
                                          plot_bgcolor='rgba(19,47,76,0.8)',
                                          paper_bgcolor='rgba(19,47,76,0.8)')
                     st.plotly_chart(fig_macd, use_container_width=True)
 
-    with tab3:
+                # Bollinger Bands
+                fig_bb = px.line(df_technical, x=df_technical.index,
+                               y=['Close', 'BB_upper', 'BB_middle', 'BB_lower'],
+                               title='Bollinger Bands')
+                fig_bb.update_layout(template='plotly_dark',
+                                   plot_bgcolor='rgba(19,47,76,0.8)',
+                                   paper_bgcolor='rgba(19,47,76,0.8)')
+                st.plotly_chart(fig_bb, use_container_width=True)
+
+    with tab4:
         if symbol:
-            st.markdown("### Latest News")
+            st.markdown("### Latest News & Analysis")
             news_articles = get_stock_news(symbol)
             if news_articles:
                 for article in news_articles:
-                    with st.expander(article['title']):
+                    with st.expander(f"📰 {article['title']}"):
                         st.markdown(f"""
                             **Published**: {article['published']}  
                             **Source**: {article['publisher']}  
 
                             {article['summary']}  
 
-                            [Read more]({article['link']})
+                            [Read full article]({article['link']})
                         """)
             else:
                 st.info("No recent news articles found for this stock.")
 
-    with tab4:
+    with tab5:
         st.markdown("### Market Overview")
+
+        # Market summary
         st.markdown("""
-            This section shows key market indices and trending stocks:
-            - Major indices performance
-            - Top trending stocks by market activity
-            - Key market indicators
+            This section provides a comprehensive view of market performance:
+            - Major market indices
+            - Top trending stocks
+            - Market movers
+            - Trading volume leaders
         """)
 
-        # Display trending stocks
-        st.subheader("Trending Stocks")
+        # Display trending stocks in a modern card layout
+        st.subheader("🔥 Trending Stocks")
         trending_df = get_trending_stocks()
 
-        for _, row in trending_df.iterrows():
-            col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
+        for i in range(0, len(trending_df), 2):
+            col1, col2 = st.columns(2)
+
+            # First stock in the pair
             with col1:
-                st.write(f"**{row['Name']} ({row['Symbol']})**")
-            with col2:
-                st.write(f"${row['Price']:.2f}")
-            with col3:
-                color = "green" if row['Change'] > 0 else "red"
-                st.markdown(f"<span style='color: {color}'>{row['Change']:.2f}%</span>",
-                          unsafe_allow_html=True)
-            with col4:
-                st.write(f"Vol: {row['Volume']:,.0f}")
+                stock = trending_df.iloc[i]
+                with st.container():
+                    st.markdown(f"""
+                        <div style='padding: 1rem; background-color: rgba(19,47,76,0.8); border-radius: 10px;'>
+                            <h3>{stock['Name']} ({stock['Symbol']})</h3>
+                            <p style='font-size: 1.5rem; margin: 0;'>${stock['Price']:.2f}</p>
+                            <p style='color: {"green" if stock['Change'] > 0 else "red"};'>
+                                {stock['Change']:.2f}%
+                            </p>
+                            <p>Vol: {stock['Volume']:,.0f}</p>
+                        </div>
+                    """, unsafe_allow_html=True)
+
+            # Second stock in the pair (if exists)
+            if i + 1 < len(trending_df):
+                with col2:
+                    stock = trending_df.iloc[i + 1]
+                    with st.container():
+                        st.markdown(f"""
+                            <div style='padding: 1rem; background-color: rgba(19,47,76,0.8); border-radius: 10px;'>
+                                <h3>{stock['Name']} ({stock['Symbol']})</h3>
+                                <p style='font-size: 1.5rem; margin: 0;'>${stock['Price']:.2f}</p>
+                                <p style='color: {"green" if stock['Change'] > 0 else "red"};'>
+                                    {stock['Change']:.2f}%
+                                </p>
+                                <p>Vol: {stock['Volume']:,.0f}</p>
+                            </div>
+                        """, unsafe_allow_html=True)
 
         # Market Indices
-        st.subheader("Major Indices")
+        st.subheader("📈 Major Indices")
         indices = ['^GSPC', '^DJI', '^IXIC']
         names = ['S&P 500', 'Dow Jones', 'NASDAQ']
 
