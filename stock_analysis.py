@@ -5,6 +5,43 @@ from utils import (
     get_stock_news, calculate_technical_indicators, get_company_info,
     init_watchlist_db, add_to_watchlist, remove_from_watchlist, get_watchlist
 )
+from datetime import datetime
+
+def render_footer():
+    st.markdown("""
+        <div class="footer">
+            <div class="footer-content">
+                <div class="footer-section">
+                    <h4>Market Data</h4>
+                    <p>Powered by Yahoo Finance</p>
+                </div>
+                <div class="footer-section">
+                    <h4>Real-time Updates</h4>
+                    <p>Last updated: {}</p>
+                </div>
+                <div class="footer-section">
+                    <h4>Support</h4>
+                    <p>Contact: support@stockanalysis.com</p>
+                </div>
+            </div>
+        </div>
+    """.format(datetime.now().strftime("%Y-%m-%d %H:%M")), unsafe_allow_html=True)
+
+def render_stock_card(stock, is_clickable=True):
+    # Pre-define onclick attribute to avoid backslash issues
+    onclick_attr = 'onclick="window.parent.location.href=\'#\'"' if is_clickable else ''
+
+    card_html = f"""
+        <div class="stock-card" {onclick_attr}>
+            <h3>{stock['Name']} ({stock['Symbol']})</h3>
+            <p style='font-size: 1.5rem; margin: 0;'>${stock['Price']:.2f}</p>
+            <p style='color: {"green" if stock['Change'] > 0 else "red"};'>
+                {stock['Change']:.2f}%
+            </p>
+            <p>Vol: {stock['Volume']:,.0f}</p>
+        </div>
+    """
+    return st.markdown(card_html, unsafe_allow_html=True)
 
 def render_stock_analysis():
     # Initialize watchlist
@@ -62,6 +99,10 @@ def render_stock_analysis():
     else:
         st.sidebar.info("Your watchlist is empty")
 
+    # Store the selected stock in session state
+    if 'selected_stock' not in st.session_state:
+        st.session_state.selected_stock = None
+
     # Main content
     tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "Chart Analysis", 
@@ -72,20 +113,23 @@ def render_stock_analysis():
     ])
 
     with tab1:
-        if symbol:
-            df, info = get_stock_data(symbol, timeframe, interval)
+        # Use either the clicked stock or the manually entered symbol
+        current_symbol = st.session_state.selected_stock or symbol
+        if current_symbol:
+            df, info = get_stock_data(current_symbol, timeframe, interval)
             if df is not None and info is not None:
                 # Add to watchlist button
-                if symbol not in watchlist:
+                if current_symbol not in watchlist:
                     if st.button("➕ Add to Watchlist"):
-                        add_to_watchlist(st.session_state.email, symbol)
-                        st.success(f"Added {symbol} to watchlist!")
+                        add_to_watchlist(st.session_state.email, current_symbol)
+                        st.success(f"Added {current_symbol} to watchlist!")
                         st.rerun()
 
                 # Stock Info Section
-                st.markdown(f"### {info.get('shortName', symbol)} Analysis")
+                st.markdown(f"### {info.get('shortName', current_symbol)} Analysis")
 
-                # Price metrics
+                # Price metrics in a modern container
+                st.markdown('<div class="metrics-container">', unsafe_allow_html=True)
                 col1, col2, col3, col4 = st.columns(4)
                 with col1:
                     st.metric(
@@ -108,10 +152,11 @@ def render_stock_analysis():
                         "Volume",
                         f"{info.get('volume', 0):,.0f}"
                     )
+                st.markdown('</div>', unsafe_allow_html=True)
 
                 # Chart
                 st.plotly_chart(
-                    create_candlestick_chart(df, symbol, chart_type),
+                    create_candlestick_chart(df, current_symbol, chart_type),
                     use_container_width=True
                 )
 
@@ -171,21 +216,21 @@ def render_stock_analysis():
             if df_technical is not None:
                 # Moving Averages
                 fig_ma = px.line(df_technical, x=df_technical.index,
-                               y=['Close', 'MA20', 'MA50', 'MA200'],
-                               title='Price and Moving Averages')
+                                  y=['Close', 'MA20', 'MA50', 'MA200'],
+                                  title='Price and Moving Averages')
                 fig_ma.update_layout(template='plotly_dark',
-                                   plot_bgcolor='rgba(19,47,76,0.8)',
-                                   paper_bgcolor='rgba(19,47,76,0.8)')
+                                      plot_bgcolor='rgba(19,47,76,0.8)',
+                                      paper_bgcolor='rgba(19,47,76,0.8)')
                 st.plotly_chart(fig_ma, use_container_width=True)
 
                 col1, col2 = st.columns(2)
                 with col1:
                     # RSI Chart
                     fig_rsi = px.line(df_technical, x=df_technical.index, y='RSI',
-                                    title='Relative Strength Index (RSI)')
+                                      title='Relative Strength Index (RSI)')
                     fig_rsi.update_layout(template='plotly_dark',
-                                        plot_bgcolor='rgba(19,47,76,0.8)',
-                                        paper_bgcolor='rgba(19,47,76,0.8)')
+                                          plot_bgcolor='rgba(19,47,76,0.8)',
+                                          paper_bgcolor='rgba(19,47,76,0.8)')
                     fig_rsi.add_hline(y=70, line_dash="dash", line_color="red")
                     fig_rsi.add_hline(y=30, line_dash="dash", line_color="green")
                     st.plotly_chart(fig_rsi, use_container_width=True)
@@ -193,20 +238,20 @@ def render_stock_analysis():
                 with col2:
                     # MACD Chart
                     fig_macd = px.line(df_technical, x=df_technical.index,
-                                     y=['MACD', 'Signal_Line'],
-                                     title='MACD and Signal Line')
+                                       y=['MACD', 'Signal_Line'],
+                                       title='MACD and Signal Line')
                     fig_macd.update_layout(template='plotly_dark',
-                                         plot_bgcolor='rgba(19,47,76,0.8)',
-                                         paper_bgcolor='rgba(19,47,76,0.8)')
+                                           plot_bgcolor='rgba(19,47,76,0.8)',
+                                           paper_bgcolor='rgba(19,47,76,0.8)')
                     st.plotly_chart(fig_macd, use_container_width=True)
 
                 # Bollinger Bands
                 fig_bb = px.line(df_technical, x=df_technical.index,
-                               y=['Close', 'BB_upper', 'BB_middle', 'BB_lower'],
-                               title='Bollinger Bands')
+                                  y=['Close', 'BB_upper', 'BB_middle', 'BB_lower'],
+                                  title='Bollinger Bands')
                 fig_bb.update_layout(template='plotly_dark',
-                                   plot_bgcolor='rgba(19,47,76,0.8)',
-                                   paper_bgcolor='rgba(19,47,76,0.8)')
+                                      plot_bgcolor='rgba(19,47,76,0.8)',
+                                      paper_bgcolor='rgba(19,47,76,0.8)')
                 st.plotly_chart(fig_bb, use_container_width=True)
 
     with tab4:
@@ -229,15 +274,15 @@ def render_stock_analysis():
 
     with tab5:
         st.markdown("### Market Overview")
-
-        # Market summary
         st.markdown("""
-            This section provides a comprehensive view of market performance:
-            - Major market indices
-            - Top trending stocks
-            - Market movers
-            - Trading volume leaders
-        """)
+            <div class="metrics-container">
+                This section provides a comprehensive view of market performance:
+                - Click on any stock card to view detailed analysis
+                - Track major market indices
+                - Monitor top trending stocks
+                - Analyze market movers
+            </div>
+        """, unsafe_allow_html=True)
 
         # Display trending stocks in a modern card layout
         st.subheader("🔥 Trending Stocks")
@@ -249,33 +294,20 @@ def render_stock_analysis():
             # First stock in the pair
             with col1:
                 stock = trending_df.iloc[i]
-                with st.container():
-                    st.markdown(f"""
-                        <div style='padding: 1rem; background-color: rgba(19,47,76,0.8); border-radius: 10px;'>
-                            <h3>{stock['Name']} ({stock['Symbol']})</h3>
-                            <p style='font-size: 1.5rem; margin: 0;'>${stock['Price']:.2f}</p>
-                            <p style='color: {"green" if stock['Change'] > 0 else "red"};'>
-                                {stock['Change']:.2f}%
-                            </p>
-                            <p>Vol: {stock['Volume']:,.0f}</p>
-                        </div>
-                    """, unsafe_allow_html=True)
+                # Make the stock card clickable
+                if st.button(f"View {stock['Symbol']}", key=f"view_{stock['Symbol']}"):
+                    st.session_state.selected_stock = stock['Symbol']
+                    st.rerun()
+                render_stock_card(stock)
 
             # Second stock in the pair (if exists)
             if i + 1 < len(trending_df):
                 with col2:
                     stock = trending_df.iloc[i + 1]
-                    with st.container():
-                        st.markdown(f"""
-                            <div style='padding: 1rem; background-color: rgba(19,47,76,0.8); border-radius: 10px;'>
-                                <h3>{stock['Name']} ({stock['Symbol']})</h3>
-                                <p style='font-size: 1.5rem; margin: 0;'>${stock['Price']:.2f}</p>
-                                <p style='color: {"green" if stock['Change'] > 0 else "red"};'>
-                                    {stock['Change']:.2f}%
-                                </p>
-                                <p>Vol: {stock['Volume']:,.0f}</p>
-                            </div>
-                        """, unsafe_allow_html=True)
+                    if st.button(f"View {stock['Symbol']}", key=f"view_{stock['Symbol']}_2"):
+                        st.session_state.selected_stock = stock['Symbol']
+                        st.rerun()
+                    render_stock_card(stock)
 
         # Market Indices
         st.subheader("📈 Major Indices")
@@ -292,3 +324,6 @@ def render_stock_analysis():
                     paper_bgcolor='rgba(19,47,76,0.8)'
                 )
                 st.plotly_chart(fig, use_container_width=True)
+
+    # Render footer
+    render_footer()
