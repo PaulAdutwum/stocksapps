@@ -19,8 +19,8 @@ with open('styles.css') as f:
 # Main application flow
 if login_form():
     render_stock_analysis()
-    
+
     # Logout button in sidebar
     if st.sidebar.button("Logout"):
         st.session_state.authenticated = False
-        st.experimental_rerun()
+        st.rerun()
