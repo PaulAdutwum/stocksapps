@@ -1,0 +1,38 @@
+.stApp {
+    background-color: #0A1929;
+}
+
+.stButton>button {
+    background-color: #1E88E5;
+    color: white;
+    border-radius: 5px;
+    padding: 0.5rem 1rem;
+    border: none;
+    transition: all 0.3s;
+}
+
+.stButton>button:hover {
+    background-color: #1565C0;
+    transform: translateY(-2px);
+}
+
+.css-1d391kg {
+    background-color: #132F4C;
+}
+
+.stTabs [data-baseweb="tab-list"] {
+    gap: 1rem;
+}
+
+.stTabs [data-baseweb="tab"] {
+    background-color: #132F4C;
+    border-radius: 4px;
+    padding: 0.5rem 1rem;
+}
+
+.custom-chart {
+    background-color: #132F4C;
+    border-radius: 10px;
+    padding: 1rem;
+    margin: 1rem 0;
+}
