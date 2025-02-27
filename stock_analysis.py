@@ -288,6 +288,10 @@ def render_stock_analysis():
         st.subheader("🔥 Trending Stocks")
         trending_df = get_trending_stocks()
 
+        # Store the selected company for detailed view
+        if 'detailed_view_stock' not in st.session_state:
+            st.session_state.detailed_view_stock = None
+
         for i in range(0, len(trending_df), 2):
             col1, col2 = st.columns(2)
 
@@ -297,6 +301,7 @@ def render_stock_analysis():
                 # Make the stock card clickable
                 if st.button(f"View {stock['Symbol']}", key=f"view_{stock['Symbol']}"):
                     st.session_state.selected_stock = stock['Symbol']
+                    st.session_state.detailed_view_stock = stock['Symbol']
                     st.rerun()
                 render_stock_card(stock)
 
@@ -306,8 +311,65 @@ def render_stock_analysis():
                     stock = trending_df.iloc[i + 1]
                     if st.button(f"View {stock['Symbol']}", key=f"view_{stock['Symbol']}_2"):
                         st.session_state.selected_stock = stock['Symbol']
+                        st.session_state.detailed_view_stock = stock['Symbol']
                         st.rerun()
                     render_stock_card(stock)
+                    
+        # Display detailed company information if a stock is selected
+        if st.session_state.detailed_view_stock:
+            st.markdown("---")
+            st.subheader(f"📊 Detailed Company Information: {st.session_state.detailed_view_stock}")
+            
+            company_info = get_company_info(st.session_state.detailed_view_stock)
+            if company_info:
+                # Company description
+                st.markdown(f"### About {company_info['Name']}")
+                st.markdown(company_info['Description'])
+                
+                # Financial metrics
+                metrics_col1, metrics_col2, metrics_col3 = st.columns(3)
+                
+                with metrics_col1:
+                    st.metric("Sector", company_info['Sector'])
+                    st.metric("P/E Ratio", company_info['PE Ratio'])
+                    st.metric("52 Week High", f"${company_info['52 Week High']:.2f}")
+                
+                with metrics_col2:
+                    st.metric("Industry", company_info['Industry'])
+                    st.metric("Market Cap", f"${company_info['Market Cap']/1e9:.2f}B")
+                    st.metric("52 Week Low", f"${company_info['52 Week Low']:.2f}")
+                
+                with metrics_col3:
+                    st.metric("Website", company_info['Website'])
+                    st.metric("Volume", f"{company_info['Volume']:,.0f}")
+                    st.metric("Avg Volume", f"{company_info['Avg Volume']:,.0f}")
+                
+                # Recent news
+                st.markdown("### Recent News")
+                news_articles = get_stock_news(st.session_state.detailed_view_stock)
+                if news_articles:
+                    for article in news_articles[:3]:  # Show just 3 recent news items
+                        with st.expander(f"📰 {article['title']}"):
+                            st.markdown(f"""
+                                **Published**: {article['published']}  
+                                **Source**: {article['publisher']}  
+                                
+                                {article['summary']}  
+                                
+                                [Read full article]({article['link']})
+                            """)
+                else:
+                    st.info("No recent news articles found for this stock.")
+                
+                # Close detailed view button
+                if st.button("Close Detailed View"):
+                    st.session_state.detailed_view_stock = None
+                    st.rerun()
+            else:
+                st.error(f"Could not retrieve detailed information for {st.session_state.detailed_view_stock}")
+                if st.button("Close"):
+                    st.session_state.detailed_view_stock = None
+                    st.rerun()
 
         # Market Indices
         st.subheader("📈 Major Indices")

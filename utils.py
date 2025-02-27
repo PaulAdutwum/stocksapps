@@ -60,7 +60,8 @@ def get_company_info(symbol):
         return None
 
 def get_trending_stocks():
-    trending = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA', 'JPM', 'V', 'WMT']
+    trending = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA', 'JPM', 'V', 'WMT', 
+                'DIS', 'NFLX', 'PYPL', 'INTC', 'AMD', 'BAC', 'KO', 'PEP', 'NKE']
     data = []
     for symbol in trending:
         try:
@@ -72,9 +73,16 @@ def get_trending_stocks():
                 'Price': info.get('currentPrice', 0),
                 'Change': info.get('regularMarketChangePercent', 0),
                 'Volume': info.get('volume', 0),
-                'Market Cap': info.get('marketCap', 0)
+                'Market Cap': info.get('marketCap', 0),
+                'Industry': info.get('industry', 'N/A'),
+                'Sector': info.get('sector', 'N/A'),
+                'EPS': info.get('trailingEPS', 0),
+                'PE': info.get('trailingPE', 0),
+                'Dividend Yield': info.get('dividendYield', 0) * 100 if info.get('dividendYield') else 0,
+                'Target Price': info.get('targetMeanPrice', 0)
             })
-        except:
+        except Exception as e:
+            print(f"Error fetching data for {symbol}: {str(e)}")
             continue
     return pd.DataFrame(data)
 
