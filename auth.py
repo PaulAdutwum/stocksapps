@@ -1,4 +1,6 @@
-import streamlit as st
+""" This script is building a streamlit app """
+
+import streamlit as st 
 import hashlib
 import sqlite3
 import re

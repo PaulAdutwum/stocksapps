@@ -1,3 +1,5 @@
+"""This script is bulidng a streamlit app"""
+
 import streamlit as st
 from auth import init_auth_db, login_form
 from stock_analysis import render_stock_analysis
